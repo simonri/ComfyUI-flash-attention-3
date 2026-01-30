@@ -3,10 +3,10 @@ __pycache__/
 /output/
 /input/
 !/input/example.png
-/models/
 /temp/
-/custom_nodes/
+/custom_nodes/*
 !custom_nodes/example_node.py.example
+!custom_nodes/ComfyUI-SimonNodes
 extra_model_paths.yaml
 /.vs
 .vscode/
@@ -24,3 +24,4 @@ web_custom_versions/
 filtered-openapi.yaml
 uv.lock
 normal.json
+models
