@@ -108,7 +108,7 @@ def lazycache_predict_noise_wrapper(executor, *args, **kwargs):
     easycache: LazyCacheHolder = model_options["transformer_options"]["easycache"]
     if easycache.is_past_end_timestep(timestep):
         return executor(*args, **kwargs)
-    x: torch.Tensor = _extract_tensor(args[0], easycache.output_channels)
+    x: torch.Tensor = args[0][:, :easycache.output_channels]
     # prepare next x_prev
     next_x_prev = x
     input_change = None
@@ -367,10 +367,10 @@ class EasyCacheNode(io.ComfyNode):
             is_experimental=True,
             inputs=[
                 io.Model.Input("model", tooltip="The model to add EasyCache to."),
-                io.Float.Input("reuse_threshold", min=0.0, default=0.2, max=3.0, step=0.01, tooltip="The threshold for reusing cached steps."),
-                io.Float.Input("start_percent", min=0.0, default=0.15, max=1.0, step=0.01, tooltip="The relative sampling step to begin use of EasyCache."),
-                io.Float.Input("end_percent", min=0.0, default=0.95, max=1.0, step=0.01, tooltip="The relative sampling step to end use of EasyCache."),
-                io.Boolean.Input("verbose", default=False, tooltip="Whether to log verbose information."),
+                io.Float.Input("reuse_threshold", min=0.0, default=0.2, max=3.0, step=0.01, tooltip="The threshold for reusing cached steps.", advanced=True),
+                io.Float.Input("start_percent", min=0.0, default=0.15, max=1.0, step=0.01, tooltip="The relative sampling step to begin use of EasyCache.", advanced=True),
+                io.Float.Input("end_percent", min=0.0, default=0.95, max=1.0, step=0.01, tooltip="The relative sampling step to end use of EasyCache.", advanced=True),
+                io.Boolean.Input("verbose", default=False, tooltip="Whether to log verbose information.", advanced=True),
             ],
             outputs=[
                 io.Model.Output(tooltip="The model with EasyCache."),
@@ -500,10 +500,10 @@ class LazyCacheNode(io.ComfyNode):
             is_experimental=True,
             inputs=[
                 io.Model.Input("model", tooltip="The model to add LazyCache to."),
-                io.Float.Input("reuse_threshold", min=0.0, default=0.2, max=3.0, step=0.01, tooltip="The threshold for reusing cached steps."),
-                io.Float.Input("start_percent", min=0.0, default=0.15, max=1.0, step=0.01, tooltip="The relative sampling step to begin use of LazyCache."),
-                io.Float.Input("end_percent", min=0.0, default=0.95, max=1.0, step=0.01, tooltip="The relative sampling step to end use of LazyCache."),
-                io.Boolean.Input("verbose", default=False, tooltip="Whether to log verbose information."),
+                io.Float.Input("reuse_threshold", min=0.0, default=0.2, max=3.0, step=0.01, tooltip="The threshold for reusing cached steps.", advanced=True),
+                io.Float.Input("start_percent", min=0.0, default=0.15, max=1.0, step=0.01, tooltip="The relative sampling step to begin use of LazyCache.", advanced=True),
+                io.Float.Input("end_percent", min=0.0, default=0.95, max=1.0, step=0.01, tooltip="The relative sampling step to end use of LazyCache.", advanced=True),
+                io.Boolean.Input("verbose", default=False, tooltip="Whether to log verbose information.", advanced=True),
             ],
             outputs=[
                 io.Model.Output(tooltip="The model with LazyCache."),
