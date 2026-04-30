@@ -74,11 +74,12 @@ class WanSelfAttention(nn.Module):
             k = self.norm_k(self.k(x)).view(b, s, n, d)
             return apply_rope1(k, freqs)
 
-        #These two are VRAM hogs, so we want to do all of q computation and
-        #have pytorch garbage collect the intermediates on the sub function
-        #return before we touch k
-        q = qkv_fn_q(x)
-        k = qkv_fn_k(x)
+        qkv = self.qkv(x) # single read: 310 MB
+        q, k, v = qkv.chunk(3, dim=-1)
+        q = self.norm_q(q).view(b, s, n, d)
+        q = apply_rope1(q, freqs)
+        k = self.norm_k(k).view(b, s, n, d)
+        k = apply_rope1(k, freqs)
 
         x = optimized_attention(
             q.view(b, s, n * d),
