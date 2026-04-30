@@ -66,14 +66,6 @@ class WanSelfAttention(nn.Module):
 
         b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
 
-        def qkv_fn_q(x):
-            q = self.norm_q(self.q(x)).view(b, s, n, d)
-            return apply_rope1(q, freqs)
-
-        def qkv_fn_k(x):
-            k = self.norm_k(self.k(x)).view(b, s, n, d)
-            return apply_rope1(k, freqs)
-
         qkv = self.qkv(x) # single read: 310 MB
         q, k, v = qkv.chunk(3, dim=-1)
         q = self.norm_q(q).view(b, s, n, d)
