@@ -66,17 +66,14 @@ class WanSelfAttention(nn.Module):
 
         b, s, n, d = *x.shape[:2], self.num_heads, self.head_dim
 
-        qkv = self.qkv(x) # single read: 310 MB
-        q, k, v = qkv.chunk(3, dim=-1)
-        q = self.norm_q(q).view(b, s, n, d)
-        q = apply_rope1(q, freqs)
-        k = self.norm_k(k).view(b, s, n, d)
-        k = apply_rope1(k, freqs)
+        q = apply_rope1(self.norm_q(self.q(x)).view(b, s, n, d), freqs)
+        k = apply_rope1(self.norm_k(self.k(x)).view(b, s, n, d), freqs)
+        v = self.v(x)
 
         x = optimized_attention(
             q.view(b, s, n * d),
             k.view(b, s, n * d),
-            self.v(x).view(b, s, n * d),
+            v,
             heads=self.num_heads,
             transformer_options=transformer_options,
         )
