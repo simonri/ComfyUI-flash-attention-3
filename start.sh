@@ -11,4 +11,6 @@ elif ! command -v conda >/dev/null 2>&1; then
 fi
 
 conda activate comfy
-exec python main.py --disable-auto-launch --disable-metadata --listen
+exec python main.py --disable-auto-launch --disable-metadata --listen --use-flash-attention --fast fp16_accumulation autotune
+
+# --highvram
