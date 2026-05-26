@@ -1,0 +1,3 @@
+[submodule "custom_nodes/ComfyUI-SimonNodes"]
+	path = custom_nodes/ComfyUI-SimonNodes
+	url = https://github.com/simonri/ComfyUI-SimonNodes
