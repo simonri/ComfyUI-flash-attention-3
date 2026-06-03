@@ -20,8 +20,8 @@ class NumberConvertNode(io.ComfyNode):
     def define_schema(cls) -> io.Schema:
         return io.Schema(
             node_id="ComfyNumberConvert",
-            display_name="Number Convert",
-            category="math",
+            display_name="Convert Number",
+            category="utils",
             search_aliases=[
                 "int to float", "float to int", "number convert",
                 "int2float", "float2int", "cast", "parse number",

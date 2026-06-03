@@ -1,13 +1,21 @@
 import comfy.options
 comfy.options.enable_args_parsing()
 
+from comfy.cli_args import args
+
+if args.list_feature_flags:
+    import json
+    from comfy_api.feature_flags import CLI_FEATURE_FLAG_REGISTRY
+    print(json.dumps(CLI_FEATURE_FLAG_REGISTRY, indent=2))  # noqa: T201
+    raise SystemExit(0)
+
 import os
 import importlib.util
 import shutil
 import importlib.metadata
 import folder_paths
 import time
-from comfy.cli_args import args, enables_dynamic_vram
+from comfy.cli_args import enables_dynamic_vram
 from app.logger import setup_logger
 setup_logger(log_level=args.verbose, use_stdout=args.log_stdout)
 
@@ -275,19 +283,25 @@ def _collect_output_absolute_paths(history_result: dict) -> list[str]:
 
 def prompt_worker(q, server_instance):
     current_time: float = 0.0
-    cache_ram = args.cache_ram
-    if cache_ram < 0:
-        cache_ram = min(32.0, max(4.0, comfy.model_management.total_ram * 0.25 / 1024.0))
+    cache_ram = 0
+    cache_ram_inactive = 0
+    if not args.cache_classic and not args.cache_none and args.cache_lru <= 0:
+        cache_ram = min(10.0, max(2.0, comfy.model_management.total_ram * 0.10 / 1024.0))
+        cache_ram_inactive = min(96.0, comfy.model_management.total_ram / 1024.0)
+        if len(args.cache_ram) > 0:
+            cache_ram = args.cache_ram[0]
+        if len(args.cache_ram) > 1:
+            cache_ram_inactive = args.cache_ram[1]
 
-    cache_type = execution.CacheType.CLASSIC
-    if args.cache_lru > 0:
+    cache_type = execution.CacheType.RAM_PRESSURE
+    if args.cache_classic:
+        cache_type = execution.CacheType.CLASSIC
+    elif args.cache_lru > 0:
         cache_type = execution.CacheType.LRU
-    elif cache_ram > 0:
-        cache_type = execution.CacheType.RAM_PRESSURE
     elif args.cache_none:
         cache_type = execution.CacheType.NONE
 
-    e = execution.PromptExecutor(server_instance, cache_type=cache_type, cache_args={ "lru" : args.cache_lru, "ram" : cache_ram } )
+    e = execution.PromptExecutor(server_instance, cache_type=cache_type, cache_args={ "lru" : args.cache_lru, "ram" : cache_ram, "ram_inactive" : cache_ram_inactive } )
     last_gc_collect = 0
     need_gc = False
     gc_collect_interval = 10.0
@@ -330,9 +344,9 @@ def prompt_worker(q, server_instance):
             # Log Time in a more readable way after 10 minutes
             if execution_time > 600:
                 execution_time = time.strftime("%H:%M:%S", time.gmtime(execution_time))
-                logging.info(f"Prompt executed in {execution_time}")
+                logging.info(f"Prompt executed in {execution_time}", extra={'color': 'green'})
             else:
-                logging.info("Prompt executed in {:.2f} seconds".format(execution_time))
+                logging.info("Prompt executed in {:.2f} seconds".format(execution_time), extra={'color': 'green'})
 
             if not asset_seeder.is_disabled():
                 paths = _collect_output_absolute_paths(e.history_result)

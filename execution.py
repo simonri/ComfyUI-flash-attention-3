@@ -2,6 +2,7 @@ import copy
 import heapq
 import inspect
 import logging
+import psutil
 import sys
 import threading
 import time
@@ -626,7 +627,7 @@ async def execute(server, dynprompt, caches, current_item, extra_data, executed,
 
         if comfy.model_management.is_oom(ex):
             tips = "This error means you ran out of memory on your GPU.\n\nTIPS: If the workflow worked before you might have accidentally set the batch_size to a large number."
-            logging.info("Memory summary: {}".format(comfy.model_management.debug_memory_summary()))
+            logging.info("Memory summary:\n{}".format(comfy.model_management.debug_memory_summary()))
             logging.error("Got an OOM, unloading all loaded models.")
             comfy.model_management.unload_all_models()
         elif isinstance(ex, RuntimeError) and ("mat1 and mat2 shapes" in str(ex)) and "Sampler" in class_type:
@@ -727,6 +728,7 @@ class PromptExecutor:
 
         self._notify_prompt_lifecycle("start", prompt_id)
         ram_headroom = int(self.cache_args["ram"] * (1024 ** 3))
+        ram_inactive_headroom = int(self.cache_args["ram_inactive"] * (1024 ** 3))
         ram_release_callback = self.caches.outputs.ram_release if self.cache_type == CacheType.RAM_PRESSURE else None
         comfy.memory_management.set_ram_cache_release_state(ram_release_callback, ram_headroom)
 
@@ -780,8 +782,14 @@ class PromptExecutor:
                         execution_list.complete_node_execution()
 
                     if self.cache_type == CacheType.RAM_PRESSURE:
-                        comfy.model_management.free_memory(0, None, pins_required=ram_headroom, ram_required=ram_headroom)
-                        ram_release_callback(ram_headroom, free_active=True)
+                        ram_release_callback(ram_inactive_headroom)
+                        ram_shortfall = ram_headroom - psutil.virtual_memory().available
+                        freed = comfy.model_management.free_pins(ram_shortfall + 512 * (1024 ** 2))
+                        if freed < ram_shortfall:
+                            if freed > 64 * (1024 ** 2):
+                                # AIMDO MEM_DECOMMIT can outrun psutil.available catching up.
+                                time.sleep(0.05)
+                            ram_release_callback(ram_headroom, free_active=True)
                 else:
                     # Only execute when the while-loop ends without break
                     # Send cached UI for intermediate output nodes that weren't executed
@@ -1019,7 +1027,12 @@ async def validate_inputs(prompt_id, prompt, item, validated, visiting=None):
                         combo_options = extra_info.get("options", [])
                     else:
                         combo_options = input_type
-                    if val not in combo_options:
+                    is_multiselect = extra_info.get("multiselect", False)
+                    if is_multiselect and isinstance(val, list):
+                        invalid_vals = [v for v in val if v not in combo_options]
+                    else:
+                        invalid_vals = [val] if val not in combo_options else []
+                    if invalid_vals:
                         input_config = info
                         list_info = ""
 
@@ -1034,7 +1047,7 @@ async def validate_inputs(prompt_id, prompt, item, validated, visiting=None):
                         error = {
                             "type": "value_not_in_list",
                             "message": "Value not in list",
-                            "details": f"{x}: '{val}' not in {list_info}",
+                            "details": f"{x}: {', '.join(repr(v) for v in invalid_vals)} not in {list_info}",
                             "extra_info": {
                                 "input_name": x,
                                 "input_config": input_config,
