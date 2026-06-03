@@ -26,3 +26,4 @@ uv.lock
 normal.json
 models
 .comfy_environment
+cache

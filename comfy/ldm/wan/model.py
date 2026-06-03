@@ -83,7 +83,7 @@ class WanSelfAttention(nn.Module):
         x = optimized_attention(
             q.view(b, s, n * d),
             k.view(b, s, n * d),
-            v,
+            self.v(x).view(b, s, n * d),
             heads=self.num_heads,
             transformer_options=transformer_options,
         )
