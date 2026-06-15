@@ -1586,6 +1586,9 @@ def sage_attention_enabled():
 def flash_attention_enabled():
     return args.use_flash_attention
 
+def flash_attention_4_enabled():
+    return args.use_flash_attention_4
+
 def xformers_enabled():
     global directml_enabled
     global cpu_state

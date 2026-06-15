@@ -48,6 +48,15 @@ except ImportError:
         logging.error("\n\nTo use the `--use-flash-attention` feature, the `flash_attn_interface` (FA3) package must be installed first.\ncommand:\nhttps://github.com/simonri/flash-attention-3-h100")
         exit(-1)
 
+FLASH_ATTENTION_4_IS_AVAILABLE = False
+try:
+    from flash_attn.cute import flash_attn_func as flash_attn_4_func
+    FLASH_ATTENTION_4_IS_AVAILABLE = True
+except ImportError:
+    if model_management.flash_attention_4_enabled():
+        logging.error("\n\nTo use the `--use-flash-attention-4` feature, the `flash-attn-4` package must be installed first.\ncommand:\n\tpip install flash-attn-4")
+        exit(-1)
+
 REGISTERED_ATTENTION_FUNCTIONS = {}
 def register_attention_function(name: str, func: Callable):
     # avoid replacing existing functions
@@ -736,13 +745,70 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
     return out
 
 
+try:
+    @torch.library.custom_op("flash_attention::flash_attn_4", mutates_args=())
+    def flash_attn_4_wrapper(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
+                    dropout_p: float = 0.0, causal: bool = False) -> torch.Tensor:
+        return flash_attn_4_func(q, k, v, causal=causal)
+
+    @flash_attn_4_wrapper.register_fake
+    def flash_attn_4_fake(q, k, v, dropout_p=0.0, causal=False):
+        return q.new_empty(q.shape)
+except (AttributeError, NameError) as error:
+    FLASH_ATTN_4_ERROR = error
+
+    def flash_attn_4_wrapper(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
+                    dropout_p: float = 0.0, causal: bool = False) -> torch.Tensor:
+        assert False, f"Could not define flash_attn_4_wrapper: {FLASH_ATTN_4_ERROR}"
+
+@wrap_attn
+def attention_flash_4(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
+    if skip_reshape:
+        b, _, _, dim_head = q.shape
+    else:
+        b, _, dim_head = q.shape
+        dim_head //= heads
+        q, k, v = map(
+            lambda t: t.view(b, -1, heads, dim_head).transpose(1, 2),
+            (q, k, v),
+        )
+
+    if mask is not None:
+        if mask.ndim == 2:
+            mask = mask.unsqueeze(0)
+        if mask.ndim == 3:
+            mask = mask.unsqueeze(1)
+
+    try:
+        if mask is not None:
+            raise RuntimeError("Mask must not be set for Flash Attention 4")
+        out = flash_attn_4_wrapper(
+            q.transpose(1, 2),
+            k.transpose(1, 2),
+            v.transpose(1, 2),
+            dropout_p=0.0,
+            causal=False,
+        ).transpose(1, 2)
+    except Exception as e:
+        logging.warning(f"Flash Attention 4 failed, using default SDPA: {e}")
+        out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
+    if not skip_output_reshape:
+        out = (
+            out.transpose(1, 2).reshape(b, -1, heads * dim_head)
+        )
+    return out
+
+
 optimized_attention = attention_basic
 
 if model_management.sage_attention_enabled():
     logging.info("Using sage attention")
     optimized_attention = attention_sage
+elif model_management.flash_attention_4_enabled():
+    logging.info("Using Flash Attention 4")
+    optimized_attention = attention_flash_4
 elif model_management.flash_attention_enabled():
-    logging.info("Using Flash Attention")
+    logging.info("Using Flash Attention 3")
     optimized_attention = attention_flash
 elif model_management.xformers_enabled():
     logging.info("Using xformers attention")
@@ -768,6 +834,8 @@ if SAGE_ATTENTION3_IS_AVAILABLE:
     register_attention_function("sage3", attention3_sage)
 if FLASH_ATTENTION_IS_AVAILABLE:
     register_attention_function("flash", attention_flash)
+if FLASH_ATTENTION_4_IS_AVAILABLE:
+    register_attention_function("flash4", attention_flash_4)
 if model_management.xformers_enabled():
     register_attention_function("xformers", attention_xformers)
 register_attention_function("pytorch", attention_pytorch)
