@@ -147,6 +147,12 @@ def load_torch_file(ckpt, safe_load=False, device=None, return_metadata=False):
                 if "MetadataIncompleteBuffer" in message:
                     raise ValueError("{}\n\nFile path: {}\n\nThe safetensors file is corrupt/incomplete. Check the file size and make sure you have copied/downloaded it correctly.".format(message, ckpt))
             raise e
+    elif ckpt.lower().endswith(".flashpack"):
+        from flashpack.deserialization import read_flashpack_file, iterate_from_flash_tensor
+        storage, fp_metadata = read_flashpack_file(ckpt, device=device)
+        sd = {name: tensor for name, tensor in iterate_from_flash_tensor(storage, fp_metadata)}
+        if return_metadata:
+            metadata = fp_metadata
     else:
         torch_args = {}
         if MMAP_TORCH_FILES:
