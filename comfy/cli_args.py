@@ -122,7 +122,6 @@ attn_group.add_argument("--use-split-cross-attention", action="store_true", help
 attn_group.add_argument("--use-quad-cross-attention", action="store_true", help="Use the sub-quadratic cross attention optimization . Ignored when xformers is used.")
 attn_group.add_argument("--use-pytorch-cross-attention", action="store_true", help="Use the new pytorch 2.0 cross attention function.")
 attn_group.add_argument("--use-sage-attention", action="store_true", help="Use sage attention.")
-attn_group.add_argument("--use-flash-attention", action="store_true", help="Use FlashAttention 3.")
 attn_group.add_argument("--use-flash-attention-4", action="store_true", help="Use FlashAttention 4.")
 
 parser.add_argument("--disable-xformers", action="store_true", help="Disable xformers.")
