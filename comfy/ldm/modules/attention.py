@@ -745,22 +745,6 @@ def attention_flash(q, k, v, heads, mask=None, attn_precision=None, skip_reshape
     return out
 
 
-try:
-    @torch.library.custom_op("flash_attention::flash_attn_4", mutates_args=())
-    def flash_attn_4_wrapper(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                    dropout_p: float = 0.0, causal: bool = False) -> torch.Tensor:
-        return flash_attn_4_func(q, k, v, causal=causal)
-
-    @flash_attn_4_wrapper.register_fake
-    def flash_attn_4_fake(q, k, v, dropout_p=0.0, causal=False):
-        return q.new_empty(q.shape)
-except (AttributeError, NameError) as error:
-    FLASH_ATTN_4_ERROR = error
-
-    def flash_attn_4_wrapper(q: torch.Tensor, k: torch.Tensor, v: torch.Tensor,
-                    dropout_p: float = 0.0, causal: bool = False) -> torch.Tensor:
-        assert False, f"Could not define flash_attn_4_wrapper: {FLASH_ATTN_4_ERROR}"
-
 @wrap_attn
 def attention_flash_4(q, k, v, heads, mask=None, attn_precision=None, skip_reshape=False, skip_output_reshape=False, **kwargs):
     if skip_reshape:
@@ -782,13 +766,13 @@ def attention_flash_4(q, k, v, heads, mask=None, attn_precision=None, skip_resha
     try:
         if mask is not None:
             raise RuntimeError("Mask must not be set for Flash Attention 4")
-        out = flash_attn_4_wrapper(
+        # flash_attn_4_func always returns (out, lse) — unpack the first element
+        out = flash_attn_4_func(
             q.transpose(1, 2),
             k.transpose(1, 2),
             v.transpose(1, 2),
-            dropout_p=0.0,
             causal=False,
-        ).transpose(1, 2)
+        )[0].transpose(1, 2)
     except Exception as e:
         logging.warning(f"Flash Attention 4 failed, using default SDPA: {e}")
         out = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=mask, dropout_p=0.0, is_causal=False)
